@@ -1385,35 +1385,3 @@ main() {
 # ============================================================
 
 main "$@"
-```
-
-**Namun ada satu hal penting:** saya tidak akan menyarankan langsung mem-publish script di atas tanpa pengujian. Kombinasi **Zabbix × distro × versi distro × database × web server** punya perbedaan nama paket, repository, PHP, konfigurasi frontend, dan dependency. Untuk installer GitHub yang benar-benar reusable, bagian repository dan package mapping perlu diuji per kombinasi.
-
-Untuk penggunaan lab kamu, saya akan prioritaskan matrix ini:
-
-| OS            | Zabbix    | DB            | Web    |
-| ------------- | --------- | ------------- | ------ |
-| Ubuntu 22.04  | 7.0 / 7.4 | MySQL         | Apache |
-| Ubuntu 24.04  | 7.0 / 7.4 | MySQL         | Apache |
-| Debian 12     | 7.0 / 7.4 | MySQL         | Apache |
-| Debian 13     | 7.0 / 7.4 | MySQL         | Apache |
-| AlmaLinux 9   | 7.0 / 7.4 | MySQL/MariaDB | Apache |
-| Rocky Linux 9 | 7.0 / 7.4 | MySQL/MariaDB | Apache |
-
-Untuk **Zabbix 8.0**, saya sarankan jangan sekadar menambah pilihan menu dulu; kita perlu memasukkan mapping repository dan dependency yang memang tersedia untuk setiap distro. Ini mencegah user memilih kombinasi yang kemudian gagal di tengah instalasi.
-
-Kalau targetnya installer untuk **lab/training**, desain berikut juga bagus:
-
-```text
-./install-zabbix.sh
-
-1. Install Zabbix
-2. Uninstall Zabbix
-3. Repair Zabbix
-4. Check Status
-5. View Logs
-6. Change Database Password
-7. Exit
-```
-
-Dengan begitu satu script GitHub bisa dipakai berulang kali untuk provisioning VM Zabbix di **Proxmox/EVE-NG**.
