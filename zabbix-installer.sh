@@ -1,34 +1,36 @@
 #!/usr/bin/env bash
 
 # ============================================================
-# Zabbix Universal Interactive Installer
+# ZABBIX INTERACTIVE INSTALLER
+# GitHub: zaxrmdn/zabbix-installer
 #
 # Supported:
-#   Ubuntu
-#   Debian
-#   AlmaLinux
-#   Rocky Linux
+#   Ubuntu 22.04 / 24.04 / 26.04
+#   Debian 12 / 13
+#   AlmaLinux 9
+#   Rocky Linux 9
 #
-# Components:
-#   Zabbix Server
-#   Zabbix Frontend
-#   Zabbix Agent 2
-#   MySQL / PostgreSQL
-#   Apache / Nginx
+# Zabbix:
+#   7.0
+#   7.4
+#   8.0
 #
-# Usage:
-#   sudo bash install-zabbix.sh
+# Database:
+#   MySQL / MariaDB
+#   PostgreSQL
 #
-# GitHub:
-#   curl -fsSL https://raw.githubusercontent.com/USERNAME/
-#   zabbix-installer/main/install-zabbix.sh | sudo bash
+# Web:
+#   Apache
+#   Nginx
 # ============================================================
 
 set -Eeuo pipefail
 
-# ============================================================
+SCRIPT_NAME="Zabbix Interactive Installer"
+
+# ------------------------------------------------------------
 # COLORS
-# ============================================================
+# ------------------------------------------------------------
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -37,1350 +39,1010 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# ============================================================
-# VARIABLES
-# ============================================================
-
-DISTRO=""
-DISTRO_VERSION=""
-DISTRO_CODENAME=""
-
-ZABBIX_VERSION=""
-ZABBIX_MAJOR=""
-
-DB_TYPE=""
-WEB_TYPE=""
-
-INSTALL_AGENT="yes"
-CONFIGURE_FIREWALL="yes"
-
-DB_NAME="zabbix"
-DB_USER="zabbix"
-DB_PASSWORD=""
-
-SERVER_IP=""
-
-# ============================================================
+# ------------------------------------------------------------
 # FUNCTIONS
-# ============================================================
+# ------------------------------------------------------------
 
-msg() {
-    echo -e "${CYAN}[*]${NC} $1"
+info() {
+    echo -e "${CYAN}[INFO]${NC} $*"
 }
 
-success() {
-    echo -e "${GREEN}[OK]${NC} $1"
+ok() {
+    echo -e "${GREEN}[OK]${NC} $*"
 }
 
-warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*"
 }
 
 error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $*" >&2
+}
+
+die() {
+    error "$*"
+    exit 1
 }
 
 pause() {
-    echo ""
-    read -r -p "Press ENTER to continue..."
+    read -rp "Press ENTER to continue..."
 }
 
-# ============================================================
-# HEADER
-# ============================================================
+trap 'error "Installation failed at line $LINENO."' ERR
 
-show_header() {
-
-    clear
-
-    echo -e "${CYAN}"
-    echo "============================================================"
-    echo "              ZABBIX UNIVERSAL INSTALLER"
-    echo "============================================================"
-    echo -e "${NC}"
-
-}
-
-# ============================================================
+# ------------------------------------------------------------
 # ROOT CHECK
-# ============================================================
+# ------------------------------------------------------------
 
-check_root() {
+if [[ "${EUID}" -ne 0 ]]; then
+    die "Run this script as root."
+fi
 
-    if [[ "$EUID" -ne 0 ]]; then
+if [[ ! -t 0 ]]; then
+    die "Interactive terminal is required."
+fi
 
-        error "Script harus dijalankan sebagai root."
-
-        echo ""
-        echo "Gunakan:"
-        echo "  sudo bash install-zabbix.sh"
-
-        exit 1
-
-    fi
-
-}
-
-# ============================================================
+# ------------------------------------------------------------
 # OS DETECTION
-# ============================================================
+# ------------------------------------------------------------
 
-detect_os() {
+if [[ ! -f /etc/os-release ]]; then
+    die "/etc/os-release not found."
+fi
 
-    msg "Detecting operating system..."
+source /etc/os-release
 
-    if [[ ! -f /etc/os-release ]]; then
+OS_ID="${ID:-unknown}"
+OS_VERSION="${VERSION_ID:-unknown}"
+OS_NAME="${PRETTY_NAME:-$OS_ID $OS_VERSION}"
 
-        error "/etc/os-release tidak ditemukan."
-        exit 1
+ARCH="$(dpkg --print-architecture 2>/dev/null || uname -m)"
 
-    fi
+echo
+echo "============================================================"
+echo "              ZABBIX INTERACTIVE INSTALLER"
+echo "============================================================"
+echo
+echo "Detected system:"
+echo
+echo "  OS       : $OS_NAME"
+echo "  ID       : $OS_ID"
+echo "  Version  : $OS_VERSION"
+echo "  Arch     : $ARCH"
+echo
 
-    source /etc/os-release
+# ------------------------------------------------------------
+# VALIDATE SUPPORTED OS
+# ------------------------------------------------------------
 
-    DISTRO="$ID"
-    DISTRO_VERSION="$VERSION_ID"
-    DISTRO_CODENAME="${VERSION_CODENAME:-}"
+SUPPORTED_OS="false"
 
-    case "$DISTRO" in
+case "$OS_ID" in
 
-        ubuntu)
-            success "Detected Ubuntu $DISTRO_VERSION"
-            ;;
+    ubuntu)
+        case "$OS_VERSION" in
+            22.04|24.04|26.04)
+                SUPPORTED_OS="true"
+                ;;
+        esac
+        ;;
 
-        debian)
-            success "Detected Debian $DISTRO_VERSION"
-            ;;
+    debian)
+        case "$OS_VERSION" in
+            12|13)
+                SUPPORTED_OS="true"
+                ;;
+        esac
+        ;;
 
-        almalinux)
-            success "Detected AlmaLinux $DISTRO_VERSION"
-            ;;
+    almalinux|rocky)
+        case "$OS_VERSION" in
+            9*)
+                SUPPORTED_OS="true"
+                ;;
+        esac
+        ;;
 
-        rocky)
-            success "Detected Rocky Linux $DISTRO_VERSION"
-            ;;
+esac
 
-        *)
-            error "Distribution tidak didukung: $DISTRO"
-            echo ""
-            echo "Supported:"
-            echo "  Ubuntu"
-            echo "  Debian"
-            echo "  AlmaLinux"
-            echo "  Rocky Linux"
-            exit 1
-            ;;
+if [[ "$SUPPORTED_OS" != "true" ]]; then
+    die "Unsupported OS: $OS_NAME"
+fi
 
-    esac
+ok "Operating system is supported."
 
-}
+# ------------------------------------------------------------
+# PACKAGE MANAGER
+# ------------------------------------------------------------
 
-# ============================================================
-# DISTRO MENU
-# ============================================================
+if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
+    PKG="apt"
+else
+    PKG="dnf"
+fi
 
-select_distro() {
+# ------------------------------------------------------------
+# ZABBIX VERSION MENU
+# ------------------------------------------------------------
 
-    show_header
+echo
+echo "Select Zabbix version:"
+echo
+echo "  1) Zabbix 7.0 LTS"
+echo "  2) Zabbix 7.4"
+echo "  3) Zabbix 8.0"
+echo
 
-    echo "Detected OS:"
-    echo -e "  ${GREEN}$PRETTY_NAME${NC}"
-    echo ""
-
-    echo "Use detected distribution?"
-    echo ""
-    echo "  1) Yes"
-    echo "  2) No - Select manually"
-    echo ""
-
-    read -r -p "Choice [1]: " CHOICE
-    CHOICE="${CHOICE:-1}"
-
-    if [[ "$CHOICE" == "1" ]]; then
-        return
-    fi
-
-    echo ""
-    echo "Select distribution:"
-    echo ""
-    echo "  1) Ubuntu"
-    echo "  2) Debian"
-    echo "  3) AlmaLinux"
-    echo "  4) Rocky Linux"
-    echo ""
-
-    read -r -p "Choice: " DISTRO_CHOICE
-
-    case "$DISTRO_CHOICE" in
-
-        1)
-            DISTRO="ubuntu"
-            ;;
-
-        2)
-            DISTRO="debian"
-            ;;
-
-        3)
-            DISTRO="almalinux"
-            ;;
-
-        4)
-            DISTRO="rocky"
-            ;;
-
-        *)
-            error "Invalid choice."
-            exit 1
-            ;;
-
-    esac
-
-    echo ""
-    read -r -p "OS version [$DISTRO_VERSION]: " INPUT_VERSION
-
-    if [[ -n "$INPUT_VERSION" ]]; then
-        DISTRO_VERSION="$INPUT_VERSION"
-    fi
-
-}
-
-# ============================================================
-# ZABBIX VERSION
-# ============================================================
-
-select_zabbix_version() {
-
-    show_header
-
-    echo "Distribution:"
-    echo "  $DISTRO $DISTRO_VERSION"
-    echo ""
-
-    echo "Select Zabbix version:"
-    echo ""
-
-    echo "  1) Zabbix 7.0 LTS"
-    echo "  2) Zabbix 7.4"
-    echo "  3) Zabbix 8.0"
-    echo ""
-
-    read -r -p "Choice: " ZBX_CHOICE
+while true; do
+    read -rp "Choice [1]: " ZBX_CHOICE
+    ZBX_CHOICE="${ZBX_CHOICE:-1}"
 
     case "$ZBX_CHOICE" in
-
         1)
-            ZABBIX_VERSION="7.0"
-            ZABBIX_MAJOR="7.0"
+            ZBX_VERSION="7.0"
+            break
             ;;
-
         2)
-            ZABBIX_VERSION="7.4"
-            ZABBIX_MAJOR="7.4"
+            ZBX_VERSION="7.4"
+            break
             ;;
-
         3)
-            ZABBIX_VERSION="8.0"
-            ZABBIX_MAJOR="8.0"
+            ZBX_VERSION="8.0"
+            break
             ;;
-
         *)
-            error "Invalid choice."
-            exit 1
+            echo "Invalid choice."
             ;;
-
     esac
+done
 
-}
+# ------------------------------------------------------------
+# VALIDATE ZABBIX / OS COMBINATION
+# ------------------------------------------------------------
 
-# ============================================================
-# DATABASE
-# ============================================================
+case "$OS_ID" in
 
-select_database() {
+    ubuntu)
+        case "$OS_VERSION" in
+            22.04|24.04|26.04)
+                ;;
+            *)
+                die "Unsupported Ubuntu version."
+                ;;
+        esac
+        ;;
 
-    show_header
+    debian)
+        case "$OS_VERSION" in
+            12|13)
+                ;;
+            *)
+                die "Unsupported Debian version."
+                ;;
+        esac
+        ;;
 
-    echo "Select database:"
-    echo ""
+    almalinux|rocky)
+        if [[ "$OS_VERSION" != 9* ]]; then
+            die "Only version 9 is supported for $OS_ID."
+        fi
+        ;;
 
-    echo "  1) MySQL / MariaDB"
-    echo "  2) PostgreSQL"
-    echo ""
+esac
 
-    read -r -p "Choice [1]: " DB_CHOICE
+# ------------------------------------------------------------
+# DATABASE MENU
+# ------------------------------------------------------------
+
+echo
+echo "Select database:"
+echo
+echo "  1) MySQL / MariaDB"
+echo "  2) PostgreSQL"
+echo
+
+while true; do
+    read -rp "Choice [1]: " DB_CHOICE
     DB_CHOICE="${DB_CHOICE:-1}"
 
     case "$DB_CHOICE" in
-
         1)
             DB_TYPE="mysql"
+            break
             ;;
-
         2)
-            DB_TYPE="postgresql"
+            DB_TYPE="pgsql"
+            break
             ;;
-
         *)
-            error "Invalid choice."
-            exit 1
+            echo "Invalid choice."
             ;;
-
     esac
+done
 
-}
+# ------------------------------------------------------------
+# WEB SERVER MENU
+# ------------------------------------------------------------
 
-# ============================================================
-# WEB SERVER
-# ============================================================
+echo
+echo "Select web server:"
+echo
+echo "  1) Apache"
+echo "  2) Nginx"
+echo
 
-select_web() {
-
-    show_header
-
-    echo "Select web server:"
-    echo ""
-
-    echo "  1) Apache"
-    echo "  2) Nginx"
-    echo ""
-
-    read -r -p "Choice [1]: " WEB_CHOICE
+while true; do
+    read -rp "Choice [1]: " WEB_CHOICE
     WEB_CHOICE="${WEB_CHOICE:-1}"
 
     case "$WEB_CHOICE" in
-
         1)
-            WEB_TYPE="apache"
+            WEB_SERVER="apache"
+            break
             ;;
-
         2)
-            WEB_TYPE="nginx"
+            WEB_SERVER="nginx"
+            break
             ;;
-
         *)
-            error "Invalid choice."
-            exit 1
+            echo "Invalid choice."
             ;;
-
     esac
+done
 
-}
+# ------------------------------------------------------------
+# AGENT 2
+# ------------------------------------------------------------
 
-# ============================================================
-# OPTIONAL COMPONENTS
-# ============================================================
+echo
+read -rp "Install Zabbix Agent 2? [Y/n]: " INSTALL_AGENT
+INSTALL_AGENT="${INSTALL_AGENT:-Y}"
 
-select_options() {
-
-    show_header
-
-    echo "Optional components"
-    echo ""
-
-    read -r -p "Install Zabbix Agent 2? [Y/n]: " INPUT
-
-    INPUT="${INPUT:-Y}"
-
-    if [[ "$INPUT" =~ ^[Nn]$ ]]; then
-        INSTALL_AGENT="no"
-    else
+case "$INSTALL_AGENT" in
+    y|Y|yes|YES)
         INSTALL_AGENT="yes"
+        ;;
+    *)
+        INSTALL_AGENT="no"
+        ;;
+esac
+
+# ------------------------------------------------------------
+# FIREWALL
+# ------------------------------------------------------------
+
+echo
+read -rp "Configure firewall automatically? [y/N]: " CONFIG_FIREWALL
+CONFIG_FIREWALL="${CONFIG_FIREWALL:-N}"
+
+case "$CONFIG_FIREWALL" in
+    y|Y|yes|YES)
+        CONFIG_FIREWALL="yes"
+        ;;
+    *)
+        CONFIG_FIREWALL="no"
+        ;;
+esac
+
+# ------------------------------------------------------------
+# DATABASE SETTINGS
+# ------------------------------------------------------------
+
+DB_NAME="zabbix"
+DB_USER="zabbix"
+
+echo
+echo "Database configuration:"
+echo
+read -rp "Database name [$DB_NAME]: " INPUT
+DB_NAME="${INPUT:-$DB_NAME}"
+
+read -rp "Database user [$DB_USER]: " INPUT
+DB_USER="${INPUT:-$DB_USER}"
+
+while true; do
+    read -rsp "Database password: " DB_PASSWORD
+    echo
+
+    if [[ -z "$DB_PASSWORD" ]]; then
+        echo "Password cannot be empty."
+        continue
     fi
 
-    echo ""
+    read -rsp "Confirm database password: " DB_PASSWORD_CONFIRM
+    echo
 
-    read -r -p "Configure firewall? [Y/n]: " INPUT
-
-    INPUT="${INPUT:-Y}"
-
-    if [[ "$INPUT" =~ ^[Nn]$ ]]; then
-        CONFIGURE_FIREWALL="no"
-    else
-        CONFIGURE_FIREWALL="yes"
+    if [[ "$DB_PASSWORD" != "$DB_PASSWORD_CONFIRM" ]]; then
+        echo "Passwords do not match."
+        continue
     fi
 
-}
+    break
+done
 
-# ============================================================
-# DATABASE PASSWORD
-# ============================================================
+# ------------------------------------------------------------
+# SUMMARY
+# ------------------------------------------------------------
 
-get_database_password() {
+echo
+echo "============================================================"
+echo "                    INSTALLATION SUMMARY"
+echo "============================================================"
+echo
+echo "OS             : $OS_NAME"
+echo "Architecture   : $ARCH"
+echo "Zabbix         : $ZBX_VERSION"
+echo "Database       : $DB_TYPE"
+echo "Web Server     : $WEB_SERVER"
+echo "Agent 2        : $INSTALL_AGENT"
+echo "Firewall       : $CONFIG_FIREWALL"
+echo "Database Name  : $DB_NAME"
+echo "Database User  : $DB_USER"
+echo
+echo "============================================================"
+echo
 
-    show_header
+read -rp "Start installation? [y/N]: " CONFIRM
 
-    echo "Database configuration"
-    echo ""
-
-    read -r -p "Database name [zabbix]: " INPUT
-
-    if [[ -n "$INPUT" ]]; then
-        DB_NAME="$INPUT"
-    fi
-
-    read -r -p "Database user [zabbix]: " INPUT
-
-    if [[ -n "$INPUT" ]]; then
-        DB_USER="$INPUT"
-    fi
-
-    while true; do
-
-        echo ""
-
-        read -r -s -p "Database password: " DB_PASSWORD
-        echo ""
-
-        if [[ -z "$DB_PASSWORD" ]]; then
-            error "Password tidak boleh kosong."
-            continue
-        fi
-
-        read -r -s -p "Confirm password: " DB_PASSWORD_CONFIRM
-        echo ""
-
-        if [[ "$DB_PASSWORD" != "$DB_PASSWORD_CONFIRM" ]]; then
-
-            error "Password tidak sama."
-            continue
-
-        fi
-
-        break
-
-    done
-
-}
-
-# ============================================================
-# VALIDATE COMBINATION
-# ============================================================
-
-validate_selection() {
-
-    show_header
-
-    msg "Validating selected configuration..."
-
-    # --------------------------------------------------------
-    # Ubuntu
-    # --------------------------------------------------------
-
-    if [[ "$DISTRO" == "ubuntu" ]]; then
-
-        case "$DISTRO_VERSION" in
-
-            22.04|24.04)
-                ;;
-
-            *)
-                error "Ubuntu $DISTRO_VERSION belum didukung."
-                exit 1
-                ;;
-
-        esac
-
-    fi
-
-    # --------------------------------------------------------
-    # Debian
-    # --------------------------------------------------------
-
-    if [[ "$DISTRO" == "debian" ]]; then
-
-        case "$DISTRO_VERSION" in
-
-            12|13)
-                ;;
-
-            *)
-                error "Debian $DISTRO_VERSION belum didukung."
-                exit 1
-                ;;
-
-        esac
-
-    fi
-
-    # --------------------------------------------------------
-    # RHEL family
-    # --------------------------------------------------------
-
-    if [[ "$DISTRO" == "almalinux" ||
-          "$DISTRO" == "rocky" ]]; then
-
-        case "$DISTRO_VERSION" in
-
-            9*)
-                ;;
-
-            *)
-                error "RHEL-based version $DISTRO_VERSION belum didukung."
-                exit 1
-                ;;
-
-        esac
-
-    fi
-
-    success "Configuration looks valid."
-
-}
-
-# ============================================================
-# SHOW SUMMARY
-# ============================================================
-
-show_summary() {
-
-    show_header
-
-    SERVER_IP=$(hostname -I | awk '{print $1}')
-
-    echo "Installation summary"
-    echo ""
-    echo "------------------------------------------------------------"
-    echo "Operating System : $PRETTY_NAME"
-    echo "Zabbix           : $ZABBIX_VERSION"
-    echo "Database         : $DB_TYPE"
-    echo "Web Server       : $WEB_TYPE"
-    echo "Agent 2          : $INSTALL_AGENT"
-    echo "Firewall         : $CONFIGURE_FIREWALL"
-    echo "Database Name    : $DB_NAME"
-    echo "Database User    : $DB_USER"
-    echo "Server IP        : $SERVER_IP"
-    echo "------------------------------------------------------------"
-    echo ""
-
-    read -r -p "Start installation? [y/N]: " CONFIRM
-
-    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-
-        echo ""
-        warning "Installation cancelled."
+case "$CONFIRM" in
+    y|Y|yes|YES)
+        ;;
+    *)
+        echo "Installation cancelled."
         exit 0
-
-    fi
-
-}
+        ;;
+esac
 
 # ============================================================
-# INSTALL BASIC PACKAGES - DEBIAN
+# UBUNTU / DEBIAN
 # ============================================================
 
-install_debian_packages() {
+install_debian_family() {
 
-    msg "Updating APT..."
+    info "Updating package index..."
 
     apt-get update
 
-    apt-get install -y \
+    info "Installing prerequisite packages..."
+
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
         wget \
         curl \
-        gnupg \
         ca-certificates \
-        lsb-release
+        gnupg \
+        lsb-release \
+        apt-transport-https
 
+    # --------------------------------------------------------
+    # ZABBIX REPOSITORY
+    # --------------------------------------------------------
+
+    info "Installing Zabbix Official Repository..."
+
+    local ZBX_REPO_URL=""
+    local ZBX_REPO_FILE=""
+
+    if [[ "$OS_ID" == "ubuntu" ]]; then
+
+        ZBX_REPO_FILE="zabbix-release_latest_${ZBX_VERSION}+ubuntu${OS_VERSION}_all.deb"
+
+        ZBX_REPO_URL="https://repo.zabbix.com/zabbix/${ZBX_VERSION}/release/ubuntu/pool/main/z/zabbix-release/${ZBX_REPO_FILE}"
+
+    elif [[ "$OS_ID" == "debian" ]]; then
+
+        ZBX_REPO_FILE="zabbix-release_latest_${ZBX_VERSION}+debian${OS_VERSION}_all.deb"
+
+        ZBX_REPO_URL="https://repo.zabbix.com/zabbix/${ZBX_VERSION}/release/debian/pool/main/z/zabbix-release/${ZBX_REPO_FILE}"
+
+    fi
+
+    info "Repository:"
+    echo "  $ZBX_REPO_URL"
+    echo
+
+    rm -f "/tmp/${ZBX_REPO_FILE}"
+
+    if ! wget -q --show-progress "$ZBX_REPO_URL" \
+        -O "/tmp/${ZBX_REPO_FILE}"; then
+
+        die "Failed to download Zabbix repository package.
+
+OS      : $OS_ID
+Version : $OS_VERSION
+Zabbix  : $ZBX_VERSION
+
+Repository URL:
+$ZBX_REPO_URL"
+    fi
+
+    dpkg -i "/tmp/${ZBX_REPO_FILE}"
+
+    apt-get update
+
+    # --------------------------------------------------------
+    # VERIFY REPOSITORY
+    # --------------------------------------------------------
+
+    info "Checking Zabbix packages..."
+
+    if ! apt-cache show zabbix-server-mysql >/dev/null 2>&1; then
+        die "Zabbix repository is installed but zabbix-server-mysql is unavailable."
+    fi
+
+    if [[ "$INSTALL_AGENT" == "yes" ]]; then
+        if ! apt-cache show zabbix-agent2 >/dev/null 2>&1; then
+            die "zabbix-agent2 is unavailable from the configured repository."
+        fi
+    fi
+
+    ok "Zabbix repository is working."
+
+    # --------------------------------------------------------
+    # INSTALL DATABASE
+    # --------------------------------------------------------
+
+    if [[ "$DB_TYPE" == "mysql" ]]; then
+
+        info "Installing MySQL..."
+
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            mysql-server
+
+    else
+
+        info "Installing PostgreSQL..."
+
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            postgresql \
+            postgresql-contrib
+
+    fi
+
+    # --------------------------------------------------------
+    # INSTALL ZABBIX SERVER
+    # --------------------------------------------------------
+
+    if [[ "$DB_TYPE" == "mysql" ]]; then
+
+        SERVER_PACKAGE="zabbix-server-mysql"
+        SQL_PACKAGE="zabbix-sql-scripts"
+
+    else
+
+        SERVER_PACKAGE="zabbix-server-pgsql"
+        SQL_PACKAGE="zabbix-sql-scripts"
+
+    fi
+
+    info "Installing Zabbix Server..."
+
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        "$SERVER_PACKAGE" \
+        "$SQL_PACKAGE"
+
+    # --------------------------------------------------------
+    # WEB SERVER
+    # --------------------------------------------------------
+
+    if [[ "$WEB_SERVER" == "apache" ]]; then
+
+        info "Installing Apache frontend..."
+
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            apache2 \
+            zabbix-frontend-php \
+            zabbix-apache-conf \
+            php-mysql \
+            php-pgsql
+
+    else
+
+        info "Installing Nginx frontend..."
+
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            nginx \
+            zabbix-frontend-php \
+            php-fpm \
+            php-mysql \
+            php-pgsql
+
+    fi
+
+    # --------------------------------------------------------
+    # AGENT
+    # --------------------------------------------------------
+
+    if [[ "$INSTALL_AGENT" == "yes" ]]; then
+
+        info "Installing Zabbix Agent 2..."
+
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            zabbix-agent2
+
+    fi
 }
 
 # ============================================================
-# INSTALL BASIC PACKAGES - RHEL
+# RHEL FAMILY
 # ============================================================
 
-install_rhel_packages() {
+install_rhel_family() {
 
-    msg "Updating DNF..."
-
-    dnf -y update
+    info "Installing prerequisite packages..."
 
     dnf install -y \
         wget \
         curl \
-        ca-certificates \
-        gnupg2
+        ca-certificates
 
-}
+    # --------------------------------------------------------
+    # REPOSITORY
+    # --------------------------------------------------------
 
-# ============================================================
-# ZABBIX REPOSITORY
-# ============================================================
+    local MAJOR_VERSION
+    MAJOR_VERSION="${OS_VERSION%%.*}"
 
-install_zabbix_repository() {
+    local RHEL_ID
 
-    msg "Installing Zabbix $ZABBIX_VERSION repository..."
-
-    case "$DISTRO" in
-
-        ubuntu)
-
-            if [[ "$DISTRO_VERSION" == "22.04" ]]; then
-
-                REPO_URL="https://repo.zabbix.com/zabbix/$ZABBIX_VERSION/release/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest+ubuntu22.04_all.deb"
-
-            elif [[ "$DISTRO_VERSION" == "24.04" ]]; then
-
-                REPO_URL="https://repo.zabbix.com/zabbix/$ZABBIX_VERSION/release/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest+ubuntu24.04_all.deb"
-
-            fi
-
-            wget -q "$REPO_URL" -O /tmp/zabbix-release.deb
-
-            dpkg -i /tmp/zabbix-release.deb
-
-            apt-get update
-
+    case "$OS_ID" in
+        almalinux)
+            RHEL_ID="rhel"
             ;;
-
-        debian)
-
-            if [[ "$DISTRO_VERSION" == "12" ]]; then
-
-                REPO_URL="https://repo.zabbix.com/zabbix/$ZABBIX_VERSION/release/debian/pool/main/z/zabbix-release/zabbix-release_latest+debian12_all.deb"
-
-            elif [[ "$DISTRO_VERSION" == "13" ]]; then
-
-                REPO_URL="https://repo.zabbix.com/zabbix/$ZABBIX_VERSION/release/debian/pool/main/z/zabbix-release/zabbix-release_latest+debian13_all.deb"
-
-            fi
-
-            wget -q "$REPO_URL" -O /tmp/zabbix-release.deb
-
-            dpkg -i /tmp/zabbix-release.deb
-
-            apt-get update
-
+        rocky)
+            RHEL_ID="rhel"
             ;;
-
-        almalinux|rocky)
-
-            if [[ "$DISTRO_VERSION" == 9* ]]; then
-
-                REPO_URL="https://repo.zabbix.com/zabbix/$ZABBIX_VERSION/release/rhel/9/noarch/zabbix-release-latest.el9.noarch.rpm"
-
-            fi
-
-            rpm -Uvh "$REPO_URL"
-
-            dnf clean all
-            dnf makecache
-
+        *)
+            die "Unsupported RHEL derivative."
             ;;
-
     esac
 
-    success "Zabbix repository installed."
+    local ZBX_REPO_URL
 
-}
+    ZBX_REPO_URL="https://repo.zabbix.com/zabbix/${ZBX_VERSION}/release/rhel/${MAJOR_VERSION}/x86_64/zabbix-release-latest-${ZBX_VERSION}.el${MAJOR_VERSION}.noarch.rpm"
 
-# ============================================================
-# DATABASE - MYSQL
-# ============================================================
+    info "Installing Zabbix Official Repository..."
 
-install_mysql() {
-
-    msg "Installing MySQL / MariaDB..."
-
-    case "$DISTRO" in
-
-        ubuntu|debian)
-
-            apt-get install -y mysql-server
-
-            systemctl enable --now mysql
-
-            ;;
-
-        almalinux|rocky)
-
-            dnf install -y mariadb-server
-
-            systemctl enable --now mariadb
-
-            ;;
-
-    esac
-
-}
-
-# ============================================================
-# DATABASE - POSTGRESQL
-# ============================================================
-
-install_postgresql() {
-
-    msg "Installing PostgreSQL..."
-
-    case "$DISTRO" in
-
-        ubuntu|debian)
-
-            apt-get install -y postgresql
-
-            systemctl enable --now postgresql
-
-            ;;
-
-        almalinux|rocky)
-
-            dnf install -y postgresql-server postgresql-contrib
-
-            if [[ ! -f /var/lib/pgsql/data/PG_VERSION ]]; then
-                postgresql-setup --initdb
-            fi
-
-            systemctl enable --now postgresql
-
-            ;;
-
-    esac
-
-}
-
-# ============================================================
-# WEB SERVER
-# ============================================================
-
-install_web_server() {
-
-    msg "Installing $WEB_TYPE..."
-
-    case "$WEB_TYPE" in
-
-        apache)
-
-            case "$DISTRO" in
-
-                ubuntu|debian)
-
-                    apt-get install -y apache2
-
-                    systemctl enable --now apache2
-
-                    ;;
-
-                almalinux|rocky)
-
-                    dnf install -y httpd
-
-                    systemctl enable --now httpd
-
-                    ;;
-
-            esac
-
-            ;;
-
-        nginx)
-
-            case "$DISTRO" in
-
-                ubuntu|debian)
-
-                    apt-get install -y nginx
-
-                    systemctl enable --now nginx
-
-                    ;;
-
-                almalinux|rocky)
-
-                    dnf install -y nginx
-
-                    systemctl enable --now nginx
-
-                    ;;
-
-            esac
-
-            ;;
-
-    esac
-
-}
-
-# ============================================================
-# ZABBIX SERVER
-# ============================================================
-
-install_zabbix_server() {
-
-    msg "Installing Zabbix Server packages..."
-
-    case "$DB_TYPE" in
-
-        mysql)
-
-            case "$WEB_TYPE" in
-
-                apache)
-
-                    if [[ "$DISTRO" == "ubuntu" ||
-                          "$DISTRO" == "debian" ]]; then
-
-                        apt-get install -y \
-                            zabbix-server-mysql \
-                            zabbix-frontend-php \
-                            zabbix-apache-conf \
-                            zabbix-sql-scripts
-
-                    else
-
-                        dnf install -y \
-                            zabbix-server-mysql \
-                            zabbix-web-mysql \
-                            zabbix-apache-conf \
-                            zabbix-sql-scripts
-
-                    fi
-
-                    ;;
-
-                nginx)
-
-                    if [[ "$DISTRO" == "ubuntu" ||
-                          "$DISTRO" == "debian" ]]; then
-
-                        apt-get install -y \
-                            zabbix-server-mysql \
-                            zabbix-frontend-php \
-                            zabbix-nginx-conf \
-                            zabbix-sql-scripts
-
-                    else
-
-                        dnf install -y \
-                            zabbix-server-mysql \
-                            zabbix-web-mysql \
-                            zabbix-nginx-conf \
-                            zabbix-sql-scripts
-
-                    fi
-
-                    ;;
-
-            esac
-
-            ;;
-
-        postgresql)
-
-            case "$WEB_TYPE" in
-
-                apache)
-
-                    if [[ "$DISTRO" == "ubuntu" ||
-                          "$DISTRO" == "debian" ]]; then
-
-                        apt-get install -y \
-                            zabbix-server-pgsql \
-                            zabbix-frontend-php \
-                            zabbix-apache-conf \
-                            zabbix-sql-scripts
-
-                    else
-
-                        dnf install -y \
-                            zabbix-server-pgsql \
-                            zabbix-web-pgsql \
-                            zabbix-apache-conf \
-                            zabbix-sql-scripts
-
-                    fi
-
-                    ;;
-
-                nginx)
-
-                    if [[ "$DISTRO" == "ubuntu" ||
-                          "$DISTRO" == "debian" ]]; then
-
-                        apt-get install -y \
-                            zabbix-server-pgsql \
-                            zabbix-frontend-php \
-                            zabbix-nginx-conf \
-                            zabbix-sql-scripts
-
-                    else
-
-                        dnf install -y \
-                            zabbix-server-pgsql \
-                            zabbix-web-pgsql \
-                            zabbix-nginx-conf \
-                            zabbix-sql-scripts
-
-                    fi
-
-                    ;;
-
-            esac
-
-            ;;
-
-    esac
-
-}
-
-# ============================================================
-# AGENT 2
-# ============================================================
-
-install_agent() {
-
-    if [[ "$INSTALL_AGENT" != "yes" ]]; then
-        return
+    if ! rpm -Uvh "$ZBX_REPO_URL"; then
+        die "Failed to install Zabbix repository:
+$ZBX_REPO_URL"
     fi
 
-    msg "Installing Zabbix Agent 2..."
+    dnf clean all
+    dnf makecache
 
-    case "$DISTRO" in
+    # --------------------------------------------------------
+    # VERIFY
+    # --------------------------------------------------------
 
-        ubuntu|debian)
+    info "Checking Zabbix packages..."
 
-            apt-get install -y \
-                zabbix-agent2 \
-                zabbix-agent2-plugin-*
+    if ! dnf list available zabbix-server-mysql >/dev/null 2>&1; then
+        die "Zabbix server package is unavailable."
+    fi
 
-            ;;
+    if [[ "$INSTALL_AGENT" == "yes" ]]; then
 
-        almalinux|rocky)
+        if ! dnf list available zabbix-agent2 >/dev/null 2>&1; then
+            die "zabbix-agent2 is unavailable."
+        fi
 
-            dnf install -y \
-                zabbix-agent2 \
-                zabbix-agent2-plugin-*
+    fi
 
-            ;;
+    ok "Zabbix repository is working."
 
-    esac
+    # --------------------------------------------------------
+    # DATABASE
+    # --------------------------------------------------------
 
-    systemctl enable zabbix-agent2
+    if [[ "$DB_TYPE" == "mysql" ]]; then
 
+        info "Installing MariaDB..."
+
+        dnf install -y \
+            mariadb-server \
+            mariadb
+
+        systemctl enable --now mariadb
+
+    else
+
+        info "Installing PostgreSQL..."
+
+        dnf install -y \
+            postgresql-server \
+            postgresql
+
+        if [[ ! -f /var/lib/pgsql/data/PG_VERSION ]]; then
+            postgresql-setup --initdb
+        fi
+
+        systemctl enable --now postgresql
+
+    fi
+
+    # --------------------------------------------------------
+    # ZABBIX SERVER
+    # --------------------------------------------------------
+
+    if [[ "$DB_TYPE" == "mysql" ]]; then
+
+        dnf install -y \
+            zabbix-server-mysql \
+            zabbix-sql-scripts
+
+    else
+
+        dnf install -y \
+            zabbix-server-pgsql \
+            zabbix-sql-scripts
+
+    fi
+
+    # --------------------------------------------------------
+    # WEB SERVER
+    # --------------------------------------------------------
+
+    if [[ "$WEB_SERVER" == "apache" ]]; then
+
+        info "Installing Apache..."
+
+        dnf install -y \
+            httpd \
+            zabbix-web-service \
+            zabbix-web-mysql \
+            zabbix-web-pgsql
+
+    else
+
+        info "Installing Nginx..."
+
+        dnf install -y \
+            nginx \
+            zabbix-web-service \
+            zabbix-web-mysql \
+            zabbix-web-pgsql
+
+    fi
+
+    # --------------------------------------------------------
+    # AGENT
+    # --------------------------------------------------------
+
+    if [[ "$INSTALL_AGENT" == "yes" ]]; then
+
+        dnf install -y zabbix-agent2
+
+    fi
 }
 
 # ============================================================
-# MYSQL DATABASE CONFIGURATION
+# INSTALL
 # ============================================================
 
-configure_mysql() {
+echo
+echo "============================================================"
+echo "                 STARTING INSTALLATION"
+echo "============================================================"
+echo
 
-    msg "Creating Zabbix MySQL database..."
+if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
+    install_debian_family
+else
+    install_rhel_family
+fi
 
-    mysql <<MYSQL
+# ============================================================
+# DATABASE CONFIGURATION
+# ============================================================
 
-CREATE DATABASE IF NOT EXISTS \`$DB_NAME\`
+echo
+info "Configuring database..."
+
+if [[ "$DB_TYPE" == "mysql" ]]; then
+
+    systemctl enable --now mysql 2>/dev/null || \
+    systemctl enable --now mariadb
+
+    MYSQL_CMD="mysql"
+
+    "$MYSQL_CMD" <<SQL
+CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`
 CHARACTER SET utf8mb4
 COLLATE utf8mb4_bin;
 
-CREATE USER IF NOT EXISTS '$DB_USER'@'localhost'
-IDENTIFIED BY '$DB_PASSWORD';
+CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost'
+IDENTIFIED BY '${DB_PASSWORD}';
 
-ALTER USER '$DB_USER'@'localhost'
-IDENTIFIED BY '$DB_PASSWORD';
+ALTER USER '${DB_USER}'@'localhost'
+IDENTIFIED BY '${DB_PASSWORD}';
 
-GRANT ALL PRIVILEGES ON \`$DB_NAME\`.*
-TO '$DB_USER'@'localhost';
+GRANT ALL PRIVILEGES
+ON \`${DB_NAME}\`.*
+TO '${DB_USER}'@'localhost';
 
 FLUSH PRIVILEGES;
-
-MYSQL
-
-    success "MySQL database created."
-
-}
-
-# ============================================================
-# POSTGRESQL DATABASE CONFIGURATION
-# ============================================================
-
-configure_postgresql() {
-
-    msg "Creating PostgreSQL database..."
-
-    sudo -u postgres psql <<SQL
-
-CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';
-
-CREATE DATABASE $DB_NAME OWNER $DB_USER;
-
 SQL
 
-    success "PostgreSQL database created."
+    ok "MySQL/MariaDB database configured."
 
-}
+else
 
-# ============================================================
-# IMPORT DATABASE
-# ============================================================
+    systemctl enable --now postgresql
 
-import_database() {
+    runuser -u postgres -- psql <<SQL
+DO \$\$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_catalog.pg_roles
+        WHERE rolname = '${DB_USER}'
+    ) THEN
+        CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASSWORD}';
+    ELSE
+        ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
+    END IF;
+END
+\$\$;
+SQL
 
-    msg "Importing Zabbix database schema..."
+    if ! runuser -u postgres -- psql -tAc \
+        "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" \
+        | grep -q 1; then
 
-    case "$DB_TYPE" in
-
-        mysql)
-
-            if [[ -f /usr/share/zabbix-sql-scripts/mysql/server.sql.gz ]]; then
-
-                zcat /usr/share/zabbix-sql-scripts/mysql/server.sql.gz | \
-                    mysql \
-                    --default-character-set=utf8mb4 \
-                    -u"$DB_USER" \
-                    -p"$DB_PASSWORD" \
-                    "$DB_NAME"
-
-            else
-
-                error "MySQL schema tidak ditemukan."
-                exit 1
-
-            fi
-
-            ;;
-
-        postgresql)
-
-            if [[ -f /usr/share/zabbix-sql-scripts/postgresql/server.sql.gz ]]; then
-
-                zcat /usr/share/zabbix-sql-scripts/postgresql/server.sql.gz | \
-                    sudo -u postgres psql "$DB_NAME"
-
-            else
-
-                error "PostgreSQL schema tidak ditemukan."
-                exit 1
-
-            fi
-
-            ;;
-
-    esac
-
-    success "Database schema imported."
-
-}
-
-# ============================================================
-# CONFIGURE ZABBIX SERVER
-# ============================================================
-
-configure_zabbix_server() {
-
-    msg "Configuring Zabbix Server..."
-
-    ZBX_CONFIG="/etc/zabbix/zabbix_server.conf"
-
-    if [[ ! -f "$ZBX_CONFIG" ]]; then
-
-        error "$ZBX_CONFIG tidak ditemukan."
-        exit 1
-
+        runuser -u postgres -- createdb \
+            -O "$DB_USER" \
+            "$DB_NAME"
     fi
 
-    cp "$ZBX_CONFIG" \
-       "$ZBX_CONFIG.backup.$(date +%Y%m%d-%H%M%S)"
+    ok "PostgreSQL database configured."
 
-    sed -i '/^DBName=/d' "$ZBX_CONFIG"
-    sed -i '/^DBUser=/d' "$ZBX_CONFIG"
-    sed -i '/^DBPassword=/d' "$ZBX_CONFIG"
+fi
 
-    cat >> "$ZBX_CONFIG" <<EOF
+# ============================================================
+# IMPORT DATABASE SCHEMA
+# ============================================================
 
-DBName=$DB_NAME
-DBUser=$DB_USER
-DBPassword=$DB_PASSWORD
+echo
+info "Importing Zabbix database schema..."
 
-EOF
+if [[ "$DB_TYPE" == "mysql" ]]; then
 
-    success "Zabbix Server configured."
+    ZBX_SQL="/usr/share/zabbix-sql-scripts/mysql/server.sql.gz"
 
-}
+    if [[ ! -f "$ZBX_SQL" ]]; then
+        die "Zabbix MySQL schema not found:
+$ZBX_SQL"
+    fi
+
+    zcat "$ZBX_SQL" | mysql \
+        --default-character-set=utf8mb4 \
+        -u"$DB_USER" \
+        -p"$DB_PASSWORD" \
+        "$DB_NAME"
+
+else
+
+    ZBX_SQL="/usr/share/zabbix-sql-scripts/postgresql/server.sql.gz"
+
+    if [[ ! -f "$ZBX_SQL" ]]; then
+        die "Zabbix PostgreSQL schema not found:
+$ZBX_SQL"
+    fi
+
+    zcat "$ZBX_SQL" | \
+        runuser -u postgres -- psql "$DB_NAME"
+
+fi
+
+ok "Database schema imported."
+
+# ============================================================
+# ZABBIX SERVER CONFIG
+# ============================================================
+
+info "Configuring Zabbix Server..."
+
+ZBX_CONF="/etc/zabbix/zabbix_server.conf"
+
+if [[ ! -f "$ZBX_CONF" ]]; then
+    die "$ZBX_CONF not found."
+fi
+
+sed -i \
+    "s|^#\?DBName=.*|DBName=${DB_NAME}|" \
+    "$ZBX_CONF"
+
+sed -i \
+    "s|^#\?DBUser=.*|DBUser=${DB_USER}|" \
+    "$ZBX_CONF"
+
+if grep -q '^#DBPassword=' "$ZBX_CONF"; then
+
+    sed -i \
+        "s|^#DBPassword=.*|DBPassword=${DB_PASSWORD}|" \
+        "$ZBX_CONF"
+
+elif grep -q '^DBPassword=' "$ZBX_CONF"; then
+
+    sed -i \
+        "s|^DBPassword=.*|DBPassword=${DB_PASSWORD}|" \
+        "$ZBX_CONF"
+
+else
+
+    echo "DBPassword=${DB_PASSWORD}" >> "$ZBX_CONF"
+
+fi
+
+# PostgreSQL does not need DBPassword in the same way,
+# but leaving it is harmless only if authentication supports it.
+if [[ "$DB_TYPE" == "pgsql" ]]; then
+    sed -i '/^DBPassword=/d' "$ZBX_CONF"
+fi
+
+# ============================================================
+# SERVICES
+# ============================================================
+
+echo
+info "Enabling Zabbix Server..."
+
+systemctl enable zabbix-server
+
+systemctl restart zabbix-server
+
+# ------------------------------------------------------------
+# AGENT
+# ------------------------------------------------------------
+
+if [[ "$INSTALL_AGENT" == "yes" ]]; then
+
+    info "Enabling Zabbix Agent 2..."
+
+    systemctl enable zabbix-agent2
+    systemctl restart zabbix-agent2
+
+fi
+
+# ------------------------------------------------------------
+# WEB
+# ------------------------------------------------------------
+
+if [[ "$WEB_SERVER" == "apache" ]]; then
+
+    systemctl enable apache2 2>/dev/null || \
+    systemctl enable httpd
+
+    systemctl restart apache2 2>/dev/null || \
+    systemctl restart httpd
+
+else
+
+    systemctl enable nginx
+    systemctl restart nginx
+
+fi
 
 # ============================================================
 # FIREWALL
 # ============================================================
 
-configure_firewall() {
+if [[ "$CONFIG_FIREWALL" == "yes" ]]; then
 
-    if [[ "$CONFIGURE_FIREWALL" != "yes" ]]; then
-        return
-    fi
+    info "Configuring firewall..."
 
-    msg "Configuring firewall..."
+    if command -v ufw >/dev/null 2>&1; then
 
-    case "$DISTRO" in
+        ufw allow 22/tcp
+        ufw allow 80/tcp
+        ufw allow 443/tcp
+        ufw allow 10050/tcp
+        ufw allow 10051/tcp
 
-        ubuntu|debian)
+        ufw --force enable
 
-            apt-get install -y ufw
+    elif command -v firewall-cmd >/dev/null 2>&1; then
 
-            ufw allow OpenSSH
-            ufw allow 80/tcp
-            ufw allow 443/tcp
-            ufw allow 10050/tcp
-            ufw allow 10051/tcp
+        systemctl enable --now firewalld
 
-            ufw --force enable
+        firewall-cmd --permanent --add-service=http
+        firewall-cmd --permanent --add-service=https
+        firewall-cmd --permanent --add-port=10050/tcp
+        firewall-cmd --permanent --add-port=10051/tcp
 
-            ;;
-
-        almalinux|rocky)
-
-            dnf install -y firewalld
-
-            systemctl enable --now firewalld
-
-            firewall-cmd --permanent --add-service=http
-            firewall-cmd --permanent --add-service=https
-            firewall-cmd --permanent --add-port=10050/tcp
-            firewall-cmd --permanent --add-port=10051/tcp
-
-            firewall-cmd --reload
-
-            ;;
-
-    esac
-
-    success "Firewall configured."
-
-}
-
-# ============================================================
-# START SERVICES
-# ============================================================
-
-start_services() {
-
-    msg "Starting Zabbix services..."
-
-    systemctl enable zabbix-server
-    systemctl restart zabbix-server
-
-    if [[ "$INSTALL_AGENT" == "yes" ]]; then
-
-        systemctl restart zabbix-agent2
+        firewall-cmd --reload
 
     fi
 
-    case "$WEB_TYPE" in
-
-        apache)
-
-            if systemctl list-unit-files | grep -q "^apache2"; then
-                systemctl restart apache2
-            fi
-
-            if systemctl list-unit-files | grep -q "^httpd"; then
-                systemctl restart httpd
-            fi
-
-            ;;
-
-        nginx)
-
-            systemctl restart nginx
-
-            ;;
-
-    esac
-
-    success "Services started."
-
-}
+fi
 
 # ============================================================
-# VALIDATE
+# VALIDATION
 # ============================================================
 
-validate_installation() {
+echo
+echo "============================================================"
+echo "                     VALIDATION"
+echo "============================================================"
+echo
 
-    echo ""
-    echo -e "${CYAN}============================================================${NC}"
-    echo "Installation validation"
-    echo -e "${CYAN}============================================================${NC}"
-    echo ""
+if systemctl is-active --quiet zabbix-server; then
+    ok "Zabbix Server       : RUNNING"
+else
+    error "Zabbix Server       : NOT RUNNING"
+fi
 
-    # Zabbix server
+if [[ "$INSTALL_AGENT" == "yes" ]]; then
 
-    if systemctl is-active --quiet zabbix-server; then
-        success "Zabbix Server : RUNNING"
+    if systemctl is-active --quiet zabbix-agent2; then
+        ok "Zabbix Agent 2      : RUNNING"
     else
-        error "Zabbix Server : FAILED"
+        error "Zabbix Agent 2      : NOT RUNNING"
     fi
 
-    # Agent
+fi
 
-    if [[ "$INSTALL_AGENT" == "yes" ]]; then
+if [[ "$WEB_SERVER" == "apache" ]]; then
 
-        if systemctl is-active --quiet zabbix-agent2; then
-            success "Zabbix Agent 2 : RUNNING"
-        else
-            error "Zabbix Agent 2 : FAILED"
-        fi
+    if systemctl is-active --quiet apache2 2>/dev/null || \
+       systemctl is-active --quiet httpd 2>/dev/null; then
 
+        ok "Web Server          : RUNNING"
+
+    else
+        error "Web Server          : NOT RUNNING"
     fi
 
-    # Web
+else
 
-    if [[ "$WEB_TYPE" == "nginx" ]]; then
-
-        if systemctl is-active --quiet nginx; then
-            success "Nginx : RUNNING"
-        else
-            error "Nginx : FAILED"
-        fi
-
+    if systemctl is-active --quiet nginx; then
+        ok "Web Server          : RUNNING"
+    else
+        error "Web Server          : NOT RUNNING"
     fi
 
-    if [[ "$WEB_TYPE" == "apache" ]]; then
-
-        if systemctl is-active --quiet apache2 2>/dev/null ||
-           systemctl is-active --quiet httpd 2>/dev/null; then
-
-            success "Apache : RUNNING"
-
-        else
-
-            error "Apache : FAILED"
-
-        fi
-
-    fi
-
-}
+fi
 
 # ============================================================
-# FINAL INFORMATION
+# SHOW PORTS
 # ============================================================
 
-show_result() {
+echo
+info "Listening ports:"
 
-    SERVER_IP=$(hostname -I | awk '{print $1}')
-
-    echo ""
-    echo -e "${GREEN}"
-    echo "============================================================"
-    echo "              INSTALLATION COMPLETED"
-    echo "============================================================"
-    echo -e "${NC}"
-
-    echo "Zabbix Version : $ZABBIX_VERSION"
-    echo "OS             : $PRETTY_NAME"
-    echo "Database       : $DB_TYPE"
-    echo "Web Server     : $WEB_TYPE"
-    echo ""
-    echo "Server IP      : $SERVER_IP"
-    echo "Zabbix Web     : http://$SERVER_IP/zabbix"
-    echo ""
-    echo "Zabbix Server  : 10051/TCP"
-    echo "Agent 2        : 10050/TCP"
-    echo ""
-    echo "Default frontend:"
-    echo "  Username : Admin"
-    echo "  Password : zabbix"
-    echo ""
-    echo -e "${YELLOW}IMPORTANT: Segera ubah password Admin.${NC}"
-    echo ""
-    echo "Troubleshooting:"
-    echo ""
-    echo "  systemctl status zabbix-server"
-    echo "  journalctl -u zabbix-server -f"
-    echo "  tail -f /var/log/zabbix/zabbix_server.log"
-    echo ""
-
-}
+ss -lntp | grep -E ':(80|443|10050|10051)\b' || true
 
 # ============================================================
-# MAIN INSTALLATION
+# FINAL
 # ============================================================
 
-main() {
+SERVER_IP="$(hostname -I | awk '{print $1}')"
 
-    check_root
-
-    detect_os
-
-    select_distro
-
-    select_zabbix_version
-
-    select_database
-
-    select_web
-
-    select_options
-
-    get_database_password
-
-    validate_selection
-
-    show_summary
-
-    show_header
-
-    echo "Starting installation..."
-    echo ""
-
-    case "$DISTRO" in
-
-        ubuntu|debian)
-            install_debian_packages
-            ;;
-
-        almalinux|rocky)
-            install_rhel_packages
-            ;;
-
-    esac
-
-    install_zabbix_repository
-
-    case "$DB_TYPE" in
-
-        mysql)
-            install_mysql
-            ;;
-
-        postgresql)
-            install_postgresql
-            ;;
-
-    esac
-
-    install_web_server
-
-    install_zabbix_server
-
-    install_agent
-
-    case "$DB_TYPE" in
-
-        mysql)
-            configure_mysql
-            ;;
-
-        postgresql)
-            configure_postgresql
-            ;;
-
-    esac
-
-    import_database
-
-    configure_zabbix_server
-
-    configure_firewall
-
-    start_services
-
-    validate_installation
-
-    show_result
-
-}
-
-# ============================================================
-# RUN
-# ============================================================
-
-main "$@"
+echo
+echo "============================================================"
+echo "                 INSTALLATION COMPLETE"
+echo "============================================================"
+echo
+echo "Zabbix Version : $ZBX_VERSION"
+echo "Database       : $DB_TYPE"
+echo "Web Server     : $WEB_SERVER"
+echo
+echo "Frontend:"
+echo
+echo "  http://${SERVER_IP}/zabbix"
+echo
+echo "Default Zabbix frontend login:"
+echo
+echo "  Username : Admin"
+echo "  Password : zabbix"
+echo
+echo "Zabbix Server configuration:"
+echo
+echo "  $ZBX_CONF"
+echo
+echo "Useful commands:"
+echo
+echo "  systemctl status zabbix-server"
+echo "  systemctl status zabbix-agent2"
+echo "  journalctl -u zabbix-server -f"
+echo
+echo "============================================================"
