@@ -16,7 +16,7 @@ fi
 
 clear
 echo -e "${GREEN}=================================================${NC}"
-echo -e "${GREEN}  UNIVERSAL ZABBIX 7.0 INTERACTIVE INSTALLER     ${NC}"
+echo -e "${GREEN}  UNIVERSAL ZABBIX 7.0                           ${NC}"
 echo -e "${GREEN}=================================================${NC}"
 
 # Deteksi OS
