@@ -13,7 +13,9 @@ fi
 
 clear
 echo -e "${GREEN}=================================================${NC}"
-echo -e "${GREEN}       ZABBIX 7.0                                ${NC}"
+echo -e "${GREEN}                ZABBIX 7.0                       ${NC}"
+echo -e "${GREEN}=================================================${NC}"
+echo -e "${GREEN}                Author : Zakaria                 ${NC}"
 echo -e "${GREEN}=================================================${NC}"
 
 # 1. Menu Interaktif
