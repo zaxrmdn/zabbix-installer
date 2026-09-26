@@ -16,7 +16,7 @@ fi
 clear
 echo -e "${RED}=================================================${NC}"
 echo -e "${RED}         ZABBIX COMPLETE UNINSTALLER             ${NC}"
-echo -e "${GREEN}           Created by Zakaria                       "
+echo -e "${GREEN}           Author : Zakaria                       "
 echo -e "${RED}=================================================${NC}"
 echo -e "${YELLOW}PERINGATAN: Script ini akan MENGHAPUS PERMANEN:${NC}"
 echo " 1. Seluruh paket Zabbix (Server, Agent, Frontend)"
