@@ -1,5 +1,5 @@
 #!/bin/bash
-# Universal Zabbix 7.0 LTS Installer (Safe & Debug Mode)
+# Universal Zabbix 7.0 LTS Installer (Fixed DEBIAN_FRONTEND issue)
 # OS Support: Ubuntu, Debian, AlmaLinux, Rocky, CentOS
 # Stack Support: MariaDB/PostgreSQL & Apache/NGINX
 
@@ -26,10 +26,10 @@ OS_ID=$ID
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     OS_FAMILY="debian"
     OS_VER=$VERSION_ID
-    export DEBIAN_FRONTEND=noninteractive   # <-- Pindahkan ke sini menggunakan export
-    PKG_INSTALL="apt-get install -y"        # <-- Hapus DEBIAN_FRONTEND dari sini
+    # PERBAIKAN: Export env variable secara global untuk script ini
+    export DEBIAN_FRONTEND=noninteractive 
+    PKG_INSTALL="apt-get install -y"
     PKG_UPDATE="apt-get update -y"
-    
 elif [[ "$OS_ID" =~ ^(almalinux|rocky|centos|rhel)$ ]]; then
     OS_FAMILY="rhel"
     OS_VER=$(echo $VERSION_ID | cut -d'.' -f1)
@@ -106,12 +106,10 @@ echo -e "${CYAN}[INFO] Memperbarui repositori paket...${NC}"
 $PKG_UPDATE
 
 echo -e "${CYAN}[INFO] Menginstal Paket Zabbix, Database, dan Web Server...${NC}"
-# Output instalasi sengaja dimunculkan agar jika error, penyebabnya terlihat
 $PKG_INSTALL $ZBX_DB_PKG $ZBX_WEB_PKG $EXTRAS $DB_PKG $WEB_PKG
 
-# Cek status instalasi
 if [ $? -ne 0 ]; then
-    echo -e "${RED}[ERROR] Instalasi paket GAGAL. Silakan cek pesan error di atas (kemungkinan apt terkunci atau repo tidak dapat diakses).${NC}"
+    echo -e "${RED}[ERROR] Instalasi paket GAGAL. Silakan cek pesan error di atas.${NC}"
     exit 1
 fi
 
@@ -159,6 +157,21 @@ fi
 if [ "$web_choice" == "2" ]; then
     sed -i 's/#        listen          8080;/        listen          8080;/g' /etc/zabbix/nginx.conf
     sed -i 's/#        server_name     example.com;/        server_name     localhost;/g' /etc/zabbix/nginx.conf
+fi
+
+if [ "$OS_FAMILY" == "rhel" ]; then
+    echo -e "${CYAN}[INFO] Mengonfigurasi SELinux dan Firewalld...${NC}"
+    if command -v setsebool >/dev/null 2>&1; then
+        setsebool -P httpd_can_network_connect 1 >/dev/null 2>&1 || true
+        setsebool -P zabbix_can_network 1 >/dev/null 2>&1 || true
+    fi
+    if command -v firewall-cmd >/dev/null 2>&1; then
+        firewall-cmd --add-service=http --permanent >/dev/null 2>&1
+        [ "$web_choice" == "2" ] && firewall-cmd --add-port=8080/tcp --permanent >/dev/null 2>&1
+        firewall-cmd --add-port=10050/tcp --permanent >/dev/null 2>&1
+        firewall-cmd --add-port=10051/tcp --permanent >/dev/null 2>&1
+        firewall-cmd --reload >/dev/null 2>&1
+    fi
 fi
 
 echo -e "${CYAN}[INFO] Memulai ulang semua layanan...${NC}"
