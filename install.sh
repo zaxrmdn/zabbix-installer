@@ -26,8 +26,10 @@ OS_ID=$ID
 if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "debian" ]]; then
     OS_FAMILY="debian"
     OS_VER=$VERSION_ID
-    PKG_INSTALL="DEBIAN_FRONTEND=noninteractive apt-get install -y"
+    export DEBIAN_FRONTEND=noninteractive   # <-- Pindahkan ke sini menggunakan export
+    PKG_INSTALL="apt-get install -y"        # <-- Hapus DEBIAN_FRONTEND dari sini
     PKG_UPDATE="apt-get update -y"
+    
 elif [[ "$OS_ID" =~ ^(almalinux|rocky|centos|rhel)$ ]]; then
     OS_FAMILY="rhel"
     OS_VER=$(echo $VERSION_ID | cut -d'.' -f1)
