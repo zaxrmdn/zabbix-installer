@@ -1,4 +1,3 @@
-# zabbix-installer
 ```
-curl -s https://github.com/zaxrmdn/zabbix-installer/blob/main/zabbix-installer.sh
+sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/zaxrmdn/zabbix-installer/main/zabbix-installer.sh)"
 ```
