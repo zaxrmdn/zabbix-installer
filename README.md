@@ -1,3 +1,10 @@
+# Install
 ```
-sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/zaxrmdn/zabbix-installer/main/zabbix-installer.sh)"
+sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/zaxrmdn/zabbix-installer/main/install.sh)"
+```
+
+# Uninstall
+
+```
+sudo bash -c "$(curl -sSL https://raw.githubusercontent.com/zaxrmdn/zabbix-installer/main/uninstall.sh)"
 ```
