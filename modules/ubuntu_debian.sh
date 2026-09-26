@@ -74,5 +74,8 @@ systemctl restart zabbix-server zabbix-agent $SVC_WEB
 systemctl enable zabbix-server zabbix-agent $SVC_WEB
 
 echo "==========================================="
-echo " Instalasi Ubuntu/Debian Selesai!"
+echo "     Instalasi Ubuntu/Debian Selesai!      "
+echo "==========================================="
+echo "       Apache: http://host/zabbix          "
+echo "       Nginx : http://host:8080            "
 echo "==========================================="
