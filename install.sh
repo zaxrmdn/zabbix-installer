@@ -15,7 +15,11 @@ fi
 
 clear
 echo -e "${GREEN}=================================================${NC}"
-echo -e "${GREEN}      Zabbix 7.0 LTS Interactive Installer       ${NC}"
+echo -e "${GREEN}                Zabbix 7.0 LTS                   ${NC}"
+echo -e "${GREEN}-------------------------------------------------${NC}"
+echo -e "${GREEN}                OS : Ubuntu Server               ${NC}"
+echo -e "${GREEN}-------------------------------------------------${NC}"
+echo -e "${GREEN}                Created by : Zakaria             ${NC}"
 echo -e "${GREEN}=================================================${NC}"
 echo ""
 
