@@ -19,7 +19,7 @@ echo -e "${GREEN}                Zabbix 7.0 LTS                   ${NC}"
 echo -e "${GREEN}-------------------------------------------------${NC}"
 echo -e "${GREEN}                OS : Ubuntu Server               ${NC}"
 echo -e "${GREEN}-------------------------------------------------${NC}"
-echo -e "${GREEN}                Created by : Zakaria             ${NC}"
+echo -e "${GREEN}                Author : Zakaria             ${NC}"
 echo -e "${GREEN}=================================================${NC}"
 echo ""
 
